@@ -80,26 +80,57 @@ exports.getOneBook = (req, res, next) => {
     );
 };
 
-exports.modifyBook = (req, res, next) => {
-    const bookObject = req.file ? {
-        ...JSON.parse(req.body.book),
-        imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`
-    } : { ...req.body };
-
-    delete bookObject.userId;
-    Book.findOne({_id: req.params.id})
-        .then((book) => {
-            if (book.userId !== req.auth.userId) {
-                res.status(401).json({ message : 'Not authorized'});
-            } else {
-                Book.updateOne({ _id: req.params.id}, { ...bookObject, _id: req.params.id})
-                    .then(() => res.status(200).json({message : 'Objet modifié!'}))
-                    .catch(error => res.status(401).json({ error }));
+// Modifier un livre avec optimisation d'image si une nouvelle est fournie
+exports.modifyBook = async (req, res, next) => {
+    try {
+        const bookObject = req.file
+            ? {
+                ...JSON.parse(req.body.book),
+                imageUrl: `${req.protocol}://${req.get('host')}/images/optimized-${req.file.filename}.webp`,
             }
-        })
-        .catch((error) => {
-            res.status(400).json({ error });
-        });
+            : { ...req.body };
+
+        delete bookObject.userId;
+
+        const book = await Book.findOne({ _id: req.params.id });
+        if (!book) {
+            return res.status(404).json({ message: 'Livre non trouvé.' });
+        }
+
+        if (book.userId !== req.auth.userId) {
+            return res.status(401).json({ message: 'Non autorisé.' });
+        }
+
+        if (req.file) {
+            // Chemins pour Sharp
+            const inputPath = path.join(__dirname, '../images', req.file.filename);
+            const outputFilename = `optimized-${req.file.filename}.webp`;
+            const outputPath = path.join(__dirname, '../images', outputFilename);
+
+            // Optimisation de l'image
+            await sharp(inputPath)
+                .resize(500)
+                .webp({ quality: 80 })
+                .toFile(outputPath);
+
+            // Suppression du fichier original
+            fs.unlink(inputPath, (err) => {
+                if (err) {
+                    console.error('Erreur lors de la suppression du fichier original :', err);
+                } else {
+                    console.log('Fichier original supprimé avec succès.');
+                }
+            });
+        }
+
+        // Mise à jour du livre
+        await Book.updateOne({ _id: req.params.id }, { ...bookObject, _id: req.params.id });
+        res.status(200).json({ message: 'Livre modifié avec succès !' });
+
+    } catch (error) {
+        console.error('Erreur lors de la modification :', error);
+        res.status(400).json({ error: error.message || 'Requête invalide.' });
+    }
 };
 
 exports.deleteBook = (req, res, next) => {
