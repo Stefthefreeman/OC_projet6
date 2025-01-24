@@ -1,21 +1,67 @@
 const Book = require("../models/book");
 const fs = require('fs');
+const sharp = require('sharp');
+const path = require('path');
+const rimraf = require('rimraf');
 exports.createBook = (req, res, next) => {
-    const bookObject = JSON.parse(req.body.book); // Parse si des données textuelles sont envoyées avec l'image
-    delete bookObject._id;
-    delete bookObject.userId;
-    const book = new Book({
-        ...bookObject,
-        userId: req.auth.userId,
-        imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`,
-    });
-    book.save()
-        .then(() => {
-            res.status(201).json({ message: 'Book saved successfully!' });
-        })
-        .catch((error) => {
-            res.status(400).json({ error });
+    try {
+        // Vérification des données reçues
+        const bookObject = JSON.parse(req.body.book);
+        delete bookObject._id;
+        delete bookObject.userId;
+
+        // Création de l'objet Book
+        const book = new Book({
+            ...bookObject,
+            userId: req.auth.userId,
+            imageUrl: `${req.protocol}://${req.get('host')}/images/${req.file.filename}`, // URL originale
         });
+
+        // Chemins pour Sharp
+        const inputPath = path.join(__dirname, '../images', req.file.filename); // Fichier téléchargé
+        const outputFilename = `optimized-${req.file.filename}.webp`; // Nom de l'image optimisée
+        const outputPath = path.join(__dirname, '../images', outputFilename); // Chemin absolu vers l'image optimisée
+
+        // Vérification que le fichier d'entrée existe
+        if (!req.file || !req.file.filename) {
+            throw new Error('Fichier manquant dans la requête.');
+        }
+
+        // Traitement de l'image avec Sharp
+        sharp(inputPath)
+            .resize(500) // Redimensionner l'image
+            .webp({ quality: 80 }) // Compression avec WebP
+            .toFile(outputPath) // Enregistrer l'image optimisée
+            .then(() => {
+                console.log('Image optimisée avec succès !');
+                setTimeout(() => {
+                    fs.unlink(inputPath, (err) => {
+                        if (err) {
+                            console.error('Erreur lors de la suppression du fichier original :', err);
+                        } else {
+                            console.log('Fichier original supprimé avec succès.');
+                        }
+                    });
+                }, 100); // Attendez 100ms avant de supprimer le fichier
+
+                // Mettre à jour l'URL de l'image optimisée
+                book.imageUrl = `${req.protocol}://${req.get('host')}/images/${outputFilename}`;
+                // Enregistrer le livre en base de données
+                return book.save();
+
+            })
+            .then(() => {
+
+                res.status(201).json({ message: 'Livre enregistré avec succès !' });
+            })
+            .catch((err) => {
+                console.error('Erreur lors du traitement de l’image :', err);
+                res.status(500).json({ error: 'Erreur lors du traitement de l’image.' });
+            });
+    } catch (error) {
+        console.error('Erreur générale :', error);
+        res.status(400).json({ error: error.message || 'Requête invalide.' });
+    }
 };
 
 exports.getOneBook = (req, res, next) => {
@@ -122,7 +168,8 @@ exports.rateBook = async (req, res, next) => {
 
         // Calculer la nouvelle moyenne
         const totalGrades = book.ratings.reduce((sum, rating) => sum + rating.grade, 0);
-        book.averageRating = Math.round(totalGrades / book.ratings.length);
+        book.averageRating = Math.round((totalGrades / book.ratings.length) * 10) / 10;
+
 
         // Sauvegarder les modifications
         try {
