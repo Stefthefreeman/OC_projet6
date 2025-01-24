@@ -2,7 +2,7 @@ const Book = require("../models/book");
 const fs = require('fs');
 const sharp = require('sharp');
 const path = require('path');
-const rimraf = require('rimraf');
+
 exports.createBook = (req, res, next) => {
     try {
         // Vérification des données reçues
