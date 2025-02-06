@@ -6,7 +6,6 @@ const app = require('./app');
 const normalizePort = (val) => {
   const port = parseInt(val, 10);
 
-  // eslint-disable-next-line no-restricted-globals
   if (isNaN(port)) {
     return val;
   }
@@ -22,17 +21,17 @@ const errorHandler = (error) => {
   if (error.syscall !== 'listen') {
     throw error;
   }
-  // eslint-disable-next-line no-use-before-define
+
   const address = server.address();
   const bind = typeof address === 'string' ? `pipe ${address}` : `port: ${port}`;
   switch (error.code) {
     case 'EACCES':
-      // eslint-disable-next-line no-console
+
       console.error(`${bind} requires elevated privileges.`);
       process.exit(1);
       break;
     case 'EADDRINUSE':
-      // eslint-disable-next-line no-console
+
       console.error(`${bind} is already in use.`);
       process.exit(1);
       break;
